@@ -344,8 +344,11 @@ public abstract class MainAbstractActivity extends AppCompatActivity {
         float rawX = ev.getRawX();
         float rawY = ev.getRawY();
         if ((mLeftRect.contains((int) rawX, (int) rawY) || mRightRect.contains((int) rawX, (int) rawY)) && (null == mSideModeType || mSideModeType.isDefaultMode())) {
-            mRightArrowFl.setVisibility(View.VISIBLE);
-            mLeftArrowFl.setVisibility(View.VISIBLE);
+            if (View.INVISIBLE == mRightArrowFl.getVisibility() && View.INVISIBLE == mLeftArrowFl.getVisibility()) {
+                mRightArrowFl.setVisibility(View.VISIBLE);
+                mLeftArrowFl.setVisibility(View.VISIBLE);
+                return false;
+            }
             if (null == mThread) {
                 mThread = new FrameLayoutStatusListenerThread();
                 mThread.start();
