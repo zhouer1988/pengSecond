@@ -39,6 +39,12 @@ public class HomeActivity extends MainAbstractActivity {
     }
 
     @Override
+    protected void subClassInitSetting() {
+        setSideModeType(SideModeType.DEFAULT_MODE);
+        setTextSize(8);
+    }
+
+    @Override
     protected Map<Integer, int[]> settingBottomButtonSize() {
         Map<Integer, int[]> integerMap = new HashMap<>();
         integerMap.put(2, new int[]{60, 60, 35, 35});
@@ -85,4 +91,5 @@ public class HomeActivity extends MainAbstractActivity {
             fragmentList.add(itemFragment);
         }
     }
+
 }

@@ -3,25 +3,21 @@ package com.example.admin.fragmentbuttomnavigationjar;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
-import android.support.v4.app.FragmentPagerAdapter;
 import android.support.v4.app.FragmentStatePagerAdapter;
 import android.support.v4.view.ViewPager;
 import android.support.v7.app.AppCompatActivity;
-import android.os.Bundle;
 import android.util.Log;
 import android.view.Gravity;
-import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import junit.framework.Assert;
-
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -92,10 +88,80 @@ public abstract class MainAbstractActivity extends AppCompatActivity {
      */
     private Map<Integer, int[]> mViewSize;
 
+    /**
+     * 当前显示的fragment的下标
+     *
+     * @param savedInstanceState
+     */
+    private int mCurrentIndex = 0;
+    private FrameLayout mRightArrowFl;
+    private FrameLayout mLeftArrowFl;
+    /**
+     * 右侧FrameLayout范围
+     */
+    private Rect mRightRect;
+    /**
+     * 左侧FrameLayout范围
+     */
+    private Rect mLeftRect;
+
+    /**
+     * 左右两个frame存活的时间
+     */
+    private volatile int mViewSurviveTime = 0;
+    /**
+     * 实现左右箭头的显示和隐藏
+     */
+    private FrameLayoutStatusListenerThread mThread;
+    private TextView mLeftArrowTv;
+    private TextView mRightArrowTv;
+
+    /**
+     * 两侧箭头的显示模式
+     */
+    public enum SideModeType {
+        DEFAULT_MODE(0),
+        LONG_LINE(1),
+        ALWAYS_HIDE(2);
+
+        int type;
+
+        SideModeType(int type) {
+            this.type = type;
+        }
+
+        public int getTModeType() {
+            return type;
+        }
+
+        /**
+         * 是否是默认模式
+         *
+         * @return
+         */
+        public boolean isDefaultMode() {
+            return this.type == DEFAULT_MODE.getTModeType();
+        }
+
+        /**
+         * 是否是一直隐藏模式
+         *
+         * @return
+         */
+        public boolean isHideMode() {
+            return this.type == ALWAYS_HIDE.getTModeType();
+        }
+    }
+
+    /**
+     * 箭头模式
+     */
+    private SideModeType mSideModeType;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        setContentView(R.layout.activity_main_abstract);
         mContainerViewPager = findViewById(R.id.container_view_pager);
         fragmentList = createContainerFragmentList();
         FragmentStatePagerAdapter adapter = new FragmentStatePagerAdapter(getSupportFragmentManager()) {
@@ -125,6 +191,34 @@ public abstract class MainAbstractActivity extends AppCompatActivity {
         mIconDirection = settingBottomButtonIconDirection();
         //view的大小
         mViewSize = settingBottomButtonSize();
+
+        //两侧箭头
+        mRightArrowFl = findViewById(R.id.right_arrow_fl);
+        mRightArrowTv = findViewById(R.id.right_arrow_tv);
+        mLeftArrowFl = findViewById(R.id.left_arrow_fl);
+        mLeftArrowTv = findViewById(R.id.left_arrow_tv);
+
+        //初始化
+        subClassInitSetting();
+        if (mSideModeType.isDefaultMode() || mSideModeType.isHideMode()) {
+            mRightArrowFl.setVisibility(View.INVISIBLE);
+            mLeftArrowFl.setVisibility(View.INVISIBLE);
+        }
+        //初始化底部按钮
+        initBottomButton();
+        //ViewPager的滑动监听
+        setViewpagerScrollListener();
+        //底部按钮的点击监听事件
+        setBottomButtonClickListener();
+        //两侧箭头的显示和监听
+        twoSidesArrowStatus();
+
+    }
+
+    /**
+     * 初始化底部按钮
+     */
+    private void initBottomButton() {
         //不能为空
         if (null != bottomButtonText) {
             for (int i = 0, count = bottomButtonText.size(); i < count; i++) {
@@ -186,7 +280,120 @@ public abstract class MainAbstractActivity extends AppCompatActivity {
         } else {
             System.out.println("没有创建底部按钮的文本");
         }
+    }
 
+    /**
+     * 给子类初始化一些父类中的参数
+     */
+    protected abstract void subClassInitSetting();
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            int[] rightLocationScreen = new int[2];
+            mRightArrowFl.getLocationOnScreen(rightLocationScreen);
+            mRightRect = new Rect(rightLocationScreen[0], rightLocationScreen[1],
+                    rightLocationScreen[0] + mRightArrowFl.getWidth(),
+                    rightLocationScreen[1] + mRightArrowFl.getHeight());
+
+            mLeftArrowFl.getLocationOnScreen(rightLocationScreen);
+            mLeftRect = new Rect(rightLocationScreen[0], rightLocationScreen[1],
+                    rightLocationScreen[0] + mLeftArrowFl.getWidth(),
+                    rightLocationScreen[1] + mLeftArrowFl.getHeight());
+            Log.d("TAG", "mRightRect:" + mRightRect);
+            Log.d("TAG", "mLeftRect:" + mLeftRect);
+        }
+    }
+
+    /**
+     * 两侧箭头的显示和监听
+     */
+    private void twoSidesArrowStatus() {
+        //减一
+        mLeftArrowTv.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                mViewSurviveTime = 0;
+                if (mCurrentIndex > FLAG_TAG) {
+                    mCurrentIndex--;
+                } else {
+                    mCurrentIndex = 0;
+                }
+                refreshFragmentAndBottomButton();
+            }
+        });
+        //加一
+        mRightArrowTv.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                mViewSurviveTime = 0;
+                if (mCurrentIndex < (fragmentList.size() - 1)) {
+                    mCurrentIndex++;
+                } else {
+                    mCurrentIndex = fragmentList.size() - 1;
+                }
+                refreshFragmentAndBottomButton();
+            }
+        });
+
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        float rawX = ev.getRawX();
+        float rawY = ev.getRawY();
+        if ((mLeftRect.contains((int) rawX, (int) rawY) || mRightRect.contains((int) rawX, (int) rawY)) && (null == mSideModeType || mSideModeType.isDefaultMode())) {
+            mRightArrowFl.setVisibility(View.VISIBLE);
+            mLeftArrowFl.setVisibility(View.VISIBLE);
+            if (null == mThread) {
+                mThread = new FrameLayoutStatusListenerThread();
+                mThread.start();
+                mViewSurviveTime = 0;
+            }
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+
+    /**
+     * 刷新UI
+     */
+    private void refreshFragmentAndBottomButton() {
+        if (mCurrentIndex != mContainerViewPager.getCurrentItem()) {
+            mContainerViewPager.setCurrentItem(mCurrentIndex, true);
+            resetButtonStatus(mCurrentIndex);
+        }
+    }
+
+    /**
+     * 底部按钮的点击监听事件
+     */
+    private void setBottomButtonClickListener() {
+        /**
+         * 给底部按钮添加点击事件
+         */
+        for (int i = FLAG_TAG, count = mBottomButtonNavigationLl.getChildCount(); i < count; i++) {
+            final TextView childView = (TextView) mBottomButtonNavigationLl.getChildAt(i);
+            final int finalI = i;
+            childView.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    int currentItem = mContainerViewPager.getCurrentItem();
+                    if (finalI != currentItem) {
+                        mContainerViewPager.setCurrentItem(finalI, true);
+                    }
+                    childView.setSelected(true);
+                    resetButtonStatus(finalI);
+                    mCurrentIndex = finalI;
+                }
+            });
+        }
+    }
+
+    /**
+     * ViewPager的滑动监听
+     */
+    private void setViewpagerScrollListener() {
         /**
          *  viewpager滑动监听
          */
@@ -209,6 +416,7 @@ public abstract class MainAbstractActivity extends AppCompatActivity {
                  * 当onPageScrollStateChanged的状态是2时，这里就会返回当前页面的下标
                  */
                 resetButtonStatus(position);
+                mCurrentIndex = position;
             }
 
             @Override
@@ -219,28 +427,6 @@ public abstract class MainAbstractActivity extends AppCompatActivity {
                  */
             }
         });
-
-        /**
-         * 给底部按钮添加点击事件
-         */
-        for (int i = FLAG_TAG, count = mBottomButtonNavigationLl.getChildCount(); i < count; i++) {
-            final TextView childView = (TextView) mBottomButtonNavigationLl.getChildAt(i);
-            final int finalI = i;
-            childView.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    int currentItem = mContainerViewPager.getCurrentItem();
-                    if (finalI != currentItem) {
-                        mContainerViewPager.setCurrentItem(finalI, true);
-                    }
-                    childView.setSelected(true);
-                    resetButtonStatus(finalI);
-                }
-            });
-
-
-        }
-
     }
 
     /**
@@ -441,4 +627,59 @@ public abstract class MainAbstractActivity extends AppCompatActivity {
      */
     @Nullable
     protected abstract List<Fragment> createContainerFragmentList();
+
+
+    class FrameLayoutStatusListenerThread extends Thread {
+
+        @Override
+        public void run() {
+            Log.d("TAG", "=======");
+            while (mViewSurviveTime < 5) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    Log.e("ERROR", e.toString());
+                }
+                Log.d("TAG", "=======" + mViewSurviveTime);
+                mViewSurviveTime++;
+            }
+
+            doSomeThingOnMainThread();
+
+        }
+    }
+
+    /**
+     * 在主线程处理一些事情
+     */
+    private void doSomeThingOnMainThread() {
+        if (getMainLooper().getThread().getId() != Thread.currentThread().getId()) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    invisibleView();
+                }
+            });
+        } else {
+            invisibleView();
+        }
+    }
+
+    /**
+     * 隐藏两侧的FrameLayout
+     */
+    private void invisibleView() {
+        mRightArrowFl.setVisibility(View.INVISIBLE);
+        mLeftArrowFl.setVisibility(View.INVISIBLE);
+        mThread = null;
+    }
+
+    /**
+     * 设置左右箭头的显示模式
+     *
+     * @param mSideModeType
+     */
+    public void setSideModeType(SideModeType mSideModeType) {
+        this.mSideModeType = mSideModeType;
+    }
 }
