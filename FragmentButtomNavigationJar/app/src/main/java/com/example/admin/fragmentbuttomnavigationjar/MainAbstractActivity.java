@@ -494,6 +494,24 @@ public abstract class MainAbstractActivity extends AppCompatActivity {
     }
 
     /**
+     * 设置左侧箭头的样子
+     *
+     * @param background
+     */
+    protected void setArrowLeftBackground(Drawable background) {
+        mLeftArrowTv.setBackground(background);
+    }
+
+    /**
+     * 设置右侧箭头的样子
+     *
+     * @param background
+     */
+    protected void setArrowRightBackground(Drawable background) {
+        mRightArrowTv.setBackground(background);
+    }
+
+    /**
      * 是否可以添加textView
      *
      * @return
